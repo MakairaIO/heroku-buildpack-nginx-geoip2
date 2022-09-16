@@ -1,4 +1,6 @@
-# Heroku Buildpack: NGINX w/ GeoIP2
+# Heroku Buildpack: NGINX w/ GeoIP2 and Accept Language
+
+This is a fork of https://github.com/agrberg/heroku-buildpack-nginx-geoip2 that includes the nginx_accept_language_module. 
 
 Extended from [Heroku's official NGINX buildpack](https://github.com/heroku/heroku-buildpack-nginx).
 

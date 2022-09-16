@@ -11,6 +11,7 @@ NGINX_VERSION=${NGINX_VERSION-1.20.2}
 PCRE_VERSION=${PCRE_VERSION-8.45}
 UUID4_VERSION=${UUID4_VERSION-master}
 ZLIB_VERSION=${ZLIB_VERSION-1.2.12}
+ACCEPT_LANGUAGE_VERSION=${ACCEPT_LANGUAGE_VERSION-master}
 
 geo_ip2_module_url=https://github.com/leev/ngx_http_geoip2_module/archive/${GEO_IP2_VERSION}.tar.gz
 headers_more_nginx_module_url=https://github.com/openresty/headers-more-nginx-module/archive/v${HEADERS_MORE_VERSION}.tar.gz
@@ -19,6 +20,7 @@ nginx_tarball_url=https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz
 pcre_tarball_url=https://ftp.exim.org/pub/pcre/pcre-${PCRE_VERSION}.tar.gz
 uuid4_url=https://github.com/cybozu/nginx-uuid4-module/archive/${UUID4_VERSION}.tar.gz
 zlib_url=http://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
+accept_language_url=https://github.com/giom/nginx_accept_language_module/archive/${ACCEPT_LANGUAGE_VERSION}.tar.gz
 
 temp_dir=$(mktemp -d /tmp/nginx.XXXXXXXXXX)
 
@@ -46,6 +48,9 @@ echo "Downloading $uuid4_url"
 echo "Downloading $zlib_url"
 (cd nginx-${NGINX_VERSION} && curl -L $zlib_url | tar xvz )
 
+echo "Downloading $accept_language_url"
+(cd nginx-${NGINX_VERSION} && curl -L $accept_language_url | tar xvz )
+
 # This will build libmaxminddb first which is required for GeoIP2
 (
   cd nginx-${NGINX_VERSION}/libmaxminddb-${MAXMIND_VERSION}
@@ -68,7 +73,8 @@ echo "Downloading $zlib_url"
     --prefix=/tmp/nginx \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/headers-more-nginx-module-${HEADERS_MORE_VERSION} \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx-uuid4-module-${UUID4_VERSION} \
-    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/ngx_http_geoip2_module-${GEO_IP2_VERSION}
+    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/ngx_http_geoip2_module-${GEO_IP2_VERSION} \
+    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx_accept_language_module-${ACCEPT_LANGUAGE_VERSION}
   make install
 )
 
@@ -85,7 +91,8 @@ echo "Downloading $zlib_url"
     --prefix=/tmp/nginx-debug \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/headers-more-nginx-module-${HEADERS_MORE_VERSION} \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx-uuid4-module-${UUID4_VERSION} \
-    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/ngx_http_geoip2_module-${GEO_IP2_VERSION}
+    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/ngx_http_geoip2_module-${GEO_IP2_VERSION} \
+    --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx_accept_language_module-${ACCEPT_LANGUAGE_VERSION}
   make install
 )
 
