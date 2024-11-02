@@ -5,24 +5,34 @@
 # at https://devcenter.heroku.com/articles/stack
 
 GEO_IP2_VERSION=${GEO_IP2_VERSION-3.4}
-HEADERS_MORE_VERSION=${HEADERS_MORE_VERSION-0.33}
-MAXMIND_VERSION=${MAXMIND_VERSION-1.6.0}
-NGINX_VERSION=${NGINX_VERSION-1.20.2}
-PCRE_VERSION=${PCRE_VERSION-8.45}
+HEADERS_MORE_VERSION=${HEADERS_MORE_VERSION-0.37}
+MAXMIND_VERSION=${MAXMIND_VERSION-1.11.0}
+NGINX_VERSION=${NGINX_VERSION-1.26.2}
 UUID4_VERSION=${UUID4_VERSION-master}
-ZLIB_VERSION=${ZLIB_VERSION-1.2.12}
+ZLIB_VERSION=${ZLIB_VERSION-1.3.1}
 ACCEPT_LANGUAGE_VERSION=${ACCEPT_LANGUAGE_VERSION-master}
+
+# Set STACK variable (or get it from an environment variable)
+STACK=${STACK:-heroku-20} # Default to heroku-20 if STACK is not set
+
+# Determine PCRE_VERSION based on STACK value
+if [[ "$STACK" =~ heroku-2[02] ]]; then
+  PCRE_VERSION="pcre-8.45"
+else
+  PCRE_VERSION="pcre2-10.37"
+fi
 
 geo_ip2_module_url=https://github.com/leev/ngx_http_geoip2_module/archive/${GEO_IP2_VERSION}.tar.gz
 headers_more_nginx_module_url=https://github.com/openresty/headers-more-nginx-module/archive/v${HEADERS_MORE_VERSION}.tar.gz
 maxmind_url=https://github.com/maxmind/libmaxminddb/releases/download/${MAXMIND_VERSION}/libmaxminddb-${MAXMIND_VERSION}.tar.gz
 nginx_tarball_url=https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz
-pcre_tarball_url=https://ftp.exim.org/pub/pcre/pcre-${PCRE_VERSION}.tar.gz
+pcre_tarball_url=https://ftp.exim.org/pub/pcre/${PCRE_VERSION}.tar.gz
 uuid4_url=https://github.com/cybozu/nginx-uuid4-module/archive/${UUID4_VERSION}.tar.gz
 zlib_url=http://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
 accept_language_url=https://github.com/giom/nginx_accept_language_module/archive/${ACCEPT_LANGUAGE_VERSION}.tar.gz
 
 temp_dir=$(mktemp -d /tmp/nginx.XXXXXXXXXX)
+maxmind_dir=$(mktemp -d /tmp/maxmind.XXXXXXXXXX)
 
 cd $temp_dir
 echo "Temp dir: $temp_dir"
@@ -54,22 +64,33 @@ echo "Downloading $accept_language_url"
 # This will build libmaxminddb first which is required for GeoIP2
 (
   cd nginx-${NGINX_VERSION}/libmaxminddb-${MAXMIND_VERSION}
-  ./configure
+  ./configure \
+    --prefix=${maxmind_dir}
   make
   make check
   make install
   ldconfig
 )
 
+if [[ $STACK == heroku-2[02] ]]; then
+  # we used to build our own PCRE 8.x, and when moving to dynamic linking, we had to ensure all existing regexes in config files continued to work, so we enforced libpcre3 (8.x) usage instead of the newer PCRE2 (10.x), which has stricter validation for certain patterns (example: /[\w-.]/ is not allowed in PCRE2)
+  # but for any newer stacks, we can use the more modern PCRE2
+  configure_opts+=(
+    --without-pcre2
+  )
+fi
+
 # This will build `nginx`
 (
   cd nginx-${NGINX_VERSION}
   ./configure \
-    --with-pcre=pcre-${PCRE_VERSION} \
+    --with-pcre=${PCRE_VERSION} \
     --with-zlib=zlib-${ZLIB_VERSION} \
     --with-http_gzip_static_module \
     --with-http_realip_module \
     --with-http_ssl_module \
+    --with-cc-opt="-I${maxmind_dir}/include" \
+    --with-ld-opt="-L${maxmind_dir}/lib" \
     --prefix=/tmp/nginx \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/headers-more-nginx-module-${HEADERS_MORE_VERSION} \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx-uuid4-module-${UUID4_VERSION} \
@@ -83,11 +104,13 @@ echo "Downloading $accept_language_url"
   cd nginx-${NGINX_VERSION}
   ./configure \
     --with-debug \
-    --with-pcre=pcre-${PCRE_VERSION} \
+    --with-pcre=${PCRE_VERSION} \
     --with-zlib=zlib-${ZLIB_VERSION} \
     --with-http_gzip_static_module \
     --with-http_realip_module \
     --with-http_ssl_module \
+    --with-cc-opt="-I${maxmind_dir}/include" \
+    --with-ld-opt="-L${maxmind_dir}/lib" \
     --prefix=/tmp/nginx-debug \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/headers-more-nginx-module-${HEADERS_MORE_VERSION} \
     --add-module=${temp_dir}/nginx-${NGINX_VERSION}/nginx-uuid4-module-${UUID4_VERSION} \
@@ -98,10 +121,11 @@ echo "Downloading $accept_language_url"
 
 release_dir=$(mktemp -d /tmp/nginx.XXXXXXXXXX)
 
-cp /tmp/nginx/sbin/nginx $release_dir/nginx
-cp /tmp/nginx-debug/sbin/nginx $release_dir/nginx-debug
-cp /tmp/nginx/conf/mime.types $release_dir/mime.types
+mv /tmp/nginx/sbin/nginx "$release_dir/nginx"
+mv /tmp/nginx-debug/sbin/nginx "$release_dir/nginx-debug"
+mv /tmp/nginx/conf/mime.types "$release_dir/mime.types"
 mkdir $release_dir/maxmind
-cp -r /usr/local/lib/libmaxminddb* $release_dir/maxmind
-tar -zcvf /tmp/nginx-"${STACK}".tgz -C $release_dir .
-cp /tmp/nginx-"${STACK}".tgz $1
+mv ${maxmind_dir}/lib/* $release_dir/maxmind/
+echo "File: $1"
+tar -zcvf "/tmp/release.tgz" -C "$release_dir" .
+mv "/tmp/release.tgz" "$1"
